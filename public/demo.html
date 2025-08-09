@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scraping API Documentation</title>
+    <style>
+        :root {
+            --primary-color: #2ecc71;
+            --secondary-color: #2c3e50;
+            --bg-light: #f8f9fa;
+            --bg-dark: #f4f4f4;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #fff;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--secondary-color);
+            padding-bottom: 20px;
+            border-bottom: 3px solid var(--primary-color);
+            margin-bottom: 40px;
+        }
+
+        .endpoint {
+            background: var(--bg-dark);
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .method {
+            color: var(--primary-color);
+            font-weight: bold;
+            background: rgba(46, 204, 113, 0.1);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        pre {
+            background: var(--bg-light);
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            font-family: 'Consolas', monospace;
+        }
+
+        .parameter {
+            margin-left: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+        }
+
+        h2 {
+            color: var(--secondary-color);
+            margin-top: 30px;
+        }
+
+        .example {
+            background: #e8f5e9;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        code {
+            background: rgba(0,0,0,0.05);
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin: 10px 0;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .endpoint {
+                padding: 15px;
+            }
+            pre {
+                padding: 10px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Ai Crafters Web Scraping API Documentation</h1>
+    
+    <h2>Base URL</h2>
+    <pre>https://your-deployment.vercel.app</pre>
+
+    <h2>Demonstration</h2>
+    <button onclick="window.location.href='/demo'" style="background-color: var(--primary-color); color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">Try the Demo</button>
+    
+
+    <div class="endpoint">
+        <h2>Scrape Endpoint</h2>
+        <h4><span class="method">GET</span> /scrape</h4>
+        
+        <h3>Description</h3>
+        <p>Scrapes content from a specified URL based on the requested method.</p>
+
+        <h3>Query Parameters</h3>
+        <div class="parameter">
+            <p><code><strong>url</strong></code> (required)<br>
+            The target website URL to scrape from.<br>
+            Example: <code>?url=https://example.com</code></p>
+
+            <p><code><strong>type</strong></code> (optional)<br>
+            The type of content to scrape. Available options:</p>
+            <ul>
+                <li><code>html</code>: Returns the raw HTML of the page</li>
+                <li><code>images</code>: Returns all image URLs found on the page</li>
+                <li><code>text</code>: Returns cleaned text content from the page</li>
+                <li><code>links</code>: Returns all hyperlinks found on the page</li>
+                <li><code>scripts</code>: Returns all script URLs found on the page</li>
+            </ul>
+        </div>
+
+        <h3>CORS Configuration</h3>
+        <ul>
+            <li>Origin: All origins allowed (*)</li>
+            <li>Methods: GET, POST</li>
+            <li>Max Age: 3600 seconds</li>
+            <li>Credentials: Supported</li>
+        </ul>
+
+        <h3>Response Format</h3>
+        <pre>
+    {
+        "message": "Scraping successful!",
+        "pageTitle": "Page Title",
+        "result": "Scraped content here"
+    }
+    </pre>
+
+        <h3>Example Requests</h3>
+        <div class="example">
+            <h3>1. Get all image sources from a website:</h3>
+            <pre>GET /scrape?url=https://example.com&type=images</pre>
+             <h4>Response Format : </h4>
+        <pre>
+    {
+        "message": "Scraping successful!",
+        "pageTitle": "Page Title",
+        "result": [
+            {
+            "url": "https://example.com/image1.jpg",
+            }
+        ]
+    }
+    </pre>
+
+            <h3>2. Get all links from a website:</h3>
+            <pre>GET /scrape?url=https://example.com&type=links</pre>
+             <h4>Response Format : </h4>
+        <pre>
+    {
+        "message": "Scraping successful!",
+        "pageTitle": "Page Title",
+        "result": [
+            {
+            "url": "https://example.com/page1",
+            "text": "Link text"
+            }
+        ]
+    }
+    </pre>
+
+            <h3>3. Get cleaned text content from a website:</h3>
+            <pre>GET /scrape?url=https://example.com&type=text</pre>
+             <h4>Response Format : </h4>
+        <pre>
+    {
+        "message": "Scraping successful!",
+        "pageTitle": "Page Title",
+        "result" : "Cleaned text content from the page"
+    }
+    </pre>
+
+            <h3>4. Get raw HTML content:</h3>
+            <pre>GET /scrape?url=https://example.com&type=html</pre>
+            <h4>Response Format : </h4>
+        <pre>
+    {
+        "message": "Scraping successful!",
+        "pageTitle": "Page Title",
+        "result" : "<html>Raw HTML content</html>"
+    }
+    </pre>
+        </div>
+
+        
+        <h3>5. Get all script sources from a website:</h3>
+        <pre>GET /scrape?url=https://example.com&type=scripts</pre>
+        <h4>Response Format : </h4>
+        <pre>
+    {
+        "message": "Scraping successful!",
+        "pageTitle": "Page Title",
+        "result" : "Script content here"
+    }
+    </pre>
+
+    <h3>Error Responses : </h3>
+        <pre>
+// 400 Bad Request
+{
+    "message": "Please provide a valid URL as a query parameter"
+}
+
+// 500 Internal Server Error
+{
+    "message": "Error occurred during scraping",
+    "error": "Error details"
+}</pre>
+
+
+    </div>
+
+    <div class="endpoint">
+        <h2>Root Endpoint</h2>
+        <p><span class="method">GET</span> /</p>
+        <p>Returns this documentation page.</p>
+    </div>
+
+    <footer>
+        <p>Server runs on port 3000 by default (configurable via PORT environment variable)</p>
+    </footer>
+    
+</body>
+</html>
