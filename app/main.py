@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 from bs4 import BeautifulSoup
 import re
+import socket
 from urllib.parse import urljoin
 import os
 
@@ -42,6 +43,25 @@ app.add_middleware(
 # Serve /public if needed
 if os.path.isdir(PUBLIC_DIR):
     app.mount("/public", StaticFiles(directory=PUBLIC_DIR), name="public")
+
+
+def get_server_ip() -> str:
+    """Get the server's public IP address"""
+    try:
+        # Try to get IP from a public service
+        import urllib.request
+        response = urllib.request.urlopen('https://api.ipify.org', timeout=5)
+        return response.read().decode('utf-8')
+    except:
+        try:
+            # Fallback to socket method
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "Unknown"
 
 
 async def make_proxy_request(url: str, use_fallback: bool = True) -> Dict[str, Any]:
@@ -147,7 +167,11 @@ async def fetch_html_with_tracking(url: str) -> tuple[str, dict]:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(url)
             r.raise_for_status()
-            return r.text, {"proxy_used": "Direct connection", "ip_used": "Direct access"}
+            server_ip = get_server_ip()
+            return r.text, {
+                "proxy_used": "Direct connection", 
+                "ip_used": f"Server IP: {server_ip} (direct)"
+            }
     except Exception:
         # If direct access fails, use proxy system
         proxy_result = await make_proxy_request(url)
@@ -155,7 +179,7 @@ async def fetch_html_with_tracking(url: str) -> tuple[str, dict]:
         if proxy_result["status"] == 200:
             return proxy_result["content"], {
                 "proxy_used": proxy_result.get("proxy_used", "Unknown proxy"),
-                "ip_used": "Proxy protected"
+                "ip_used": f"Proxy IP ({proxy_result.get('proxy_used', 'Unknown')})"
             }
         else:
             # Try fallback to http if https fails
@@ -165,7 +189,11 @@ async def fetch_html_with_tracking(url: str) -> tuple[str, dict]:
                     async with httpx.AsyncClient(timeout=30) as client:
                         r = await client.get(fallback_url)
                         r.raise_for_status()
-                        return r.text, {"proxy_used": "HTTP fallback", "ip_used": "Direct access (HTTP)"}
+                        server_ip = get_server_ip()
+                        return r.text, {
+                            "proxy_used": "HTTP fallback", 
+                            "ip_used": f"Server IP: {server_ip} (HTTP fallback)"
+                        }
                 except Exception:
                     pass
             
