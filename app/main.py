@@ -139,6 +139,40 @@ async def fetch_html(url: str) -> str:
             raise httpx.HTTPError(f"Failed to fetch URL: {url}. Proxy error: {proxy_result.get('content', 'Unknown error')}")
 
 
+async def fetch_html_with_tracking(url: str) -> tuple[str, dict]:
+    """Fetch HTML content with proxy usage tracking"""
+    
+    # First try direct access
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            return r.text, {"proxy_used": "Direct connection", "ip_used": "Direct access"}
+    except Exception:
+        # If direct access fails, use proxy system
+        proxy_result = await make_proxy_request(url)
+        
+        if proxy_result["status"] == 200:
+            return proxy_result["content"], {
+                "proxy_used": proxy_result.get("proxy_used", "Unknown proxy"),
+                "ip_used": "Proxy protected"
+            }
+        else:
+            # Try fallback to http if https fails
+            if url.lower().startswith("https://"):
+                fallback_url = "http://" + url[8:]
+                try:
+                    async with httpx.AsyncClient(timeout=30) as client:
+                        r = await client.get(fallback_url)
+                        r.raise_for_status()
+                        return r.text, {"proxy_used": "HTTP fallback", "ip_used": "Direct access (HTTP)"}
+                except Exception:
+                    pass
+            
+            # If all else fails, raise an error
+            raise httpx.HTTPError(f"Failed to fetch URL: {url}. Proxy error: {proxy_result.get('content', 'Unknown error')}")
+
+
 def extract_images(soup: BeautifulSoup, base_url: str) -> List[Dict[str, str]]:
     images: List[Dict[str, str]] = []
 
@@ -222,23 +256,35 @@ async def scrape(url: Optional[str] = None, type: Optional[str] = None):
         url = "https://" + url
 
     try:
-        html = await fetch_html(url)
+        # Track proxy usage and response details
+        proxy_info = {"proxy_used": "Direct connection", "ip_used": "Not tracked"}
+        
+        # Fetch HTML with proxy tracking
+        html, proxy_info = await fetch_html_with_tracking(url)
         soup = BeautifulSoup(html, "lxml")
         page_title = (soup.title.string if soup.title else "").strip()
 
+        # Base response with proxy info
+        base_response = {
+            "message": "Success",
+            "pageTitle": page_title,
+            "proxy_used": proxy_info["proxy_used"],
+            "ip_used": proxy_info["ip_used"]
+        }
+
         if type == "html":
-            return {"message": "Raw HTML", "pageTitle": page_title, "result": html}
+            return {**base_response, "message": "Raw HTML", "result": html}
         if type == "images":
-            return {"message": "Images", "pageTitle": page_title, "result": extract_images(soup, url)}
+            return {**base_response, "message": "Images", "result": extract_images(soup, url)}
         if type == "text":
-            return {"message": "Text", "pageTitle": page_title, "result": extract_text(soup)}
+            return {**base_response, "message": "Text", "result": extract_text(soup)}
         if type == "links":
-            return {"message": "Links extracted successfully", "pageTitle": page_title, "result": extract_links(soup, url)}
+            return {**base_response, "message": "Links extracted successfully", "result": extract_links(soup, url)}
         if type == "scripts":
-            return {"message": "Scripts extracted successfully", "pageTitle": page_title, "result": extract_scripts(soup)}
+            return {**base_response, "message": "Scripts extracted successfully", "result": extract_scripts(soup)}
 
         # Default to raw HTML
-        return {"message": "Raw HTML", "pageTitle": page_title, "result": html}
+        return {**base_response, "message": "Raw HTML", "result": html}
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail={"message": "Error fetching the website", "error": str(e)})
 

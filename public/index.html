@@ -143,6 +143,18 @@
         </div>
       </div>
       
+      <!-- Request Information Section -->
+      <div class="request-info" style="margin-bottom: 1.5rem; padding: 1rem; background: #f0f9ff; border-radius: 6px; border: 1px solid #0ea5e9; display: none;">
+        <h3 style="margin: 0 0 0.5rem 0; color: #0c4a6e; font-size: 1.1rem;">🌐 Request Details</h3>
+        <div id="request-details" style="font-size: 0.9rem; color: #0369a1;">
+          <div>📊 <strong>Status Code:</strong> <span id="status-code">-</span></div>
+          <div>🌍 <strong>IP Used:</strong> <span id="ip-used">-</span></div>
+          <div>⏱️ <strong>Response Time:</strong> <span id="response-time">-</span></div>
+          <div>🔗 <strong>Proxy Used:</strong> <span id="proxy-used">-</span></div>
+          <div>📏 <strong>Content Length:</strong> <span id="content-length">-</span></div>
+        </div>
+      </div>
+      
       <pre id="scraped-html">Scraped content will appear here...</pre>
     </div>
   </div>
@@ -154,8 +166,21 @@
       const url = document.getElementById('url').value;
       const type = document.getElementById('type').value;
       const resultContainer = document.getElementById('scraped-html');
+      const requestInfoDiv = document.querySelector('.request-info');
+      
+      // Reset and show request info section
       resultContainer.textContent = 'Scraping... Please wait.';
       resultContainer.className = 'loading';
+      requestInfoDiv.style.display = 'block';
+      
+      // Reset request details
+      document.getElementById('status-code').textContent = 'Loading...';
+      document.getElementById('ip-used').textContent = 'Loading...';
+      document.getElementById('response-time').textContent = 'Loading...';
+      document.getElementById('proxy-used').textContent = 'Loading...';
+      document.getElementById('content-length').textContent = 'Loading...';
+
+      const startTime = Date.now();
 
       try {
         const response = await fetch(`/scrape?url=${encodeURIComponent(url)}&type=${encodeURIComponent(type)}`, {
@@ -165,12 +190,31 @@
           }
         });
 
+        const responseTime = Date.now() - startTime;
+        
+        // Update request details
+        document.getElementById('status-code').textContent = response.status;
+        document.getElementById('status-code').style.color = response.ok ? '#059669' : '#dc2626';
+        document.getElementById('response-time').textContent = `${responseTime}ms`;
+        document.getElementById('content-length').textContent = response.headers.get('content-length') || 'Unknown';
+
         if (!response.ok) {
           throw new Error('Failed to scrape the website. Make sure the URL is correct.');
         }
 
         const data = await response.json();
         resultContainer.className = '';
+
+        // Update proxy and IP information from response
+        if (data.proxy_used) {
+          document.getElementById('proxy-used').textContent = data.proxy_used;
+        } else {
+          document.getElementById('proxy-used').textContent = 'Direct connection';
+        }
+        
+        // Try to get IP from response headers or data
+        const ipUsed = data.ip_used || data.server_ip || 'Not provided';
+        document.getElementById('ip-used').textContent = ipUsed;
 
         if (data.result !== undefined) {
           if (Array.isArray(data.result)) {
@@ -191,6 +235,14 @@
       } catch (error) {
         resultContainer.className = '';
         resultContainer.textContent = `Error: ${error.message}`;
+        
+        // Update request details for failed requests
+        document.getElementById('status-code').textContent = 'Failed';
+        document.getElementById('status-code').style.color = '#dc2626';
+        document.getElementById('response-time').textContent = `${Date.now() - startTime}ms`;
+        document.getElementById('proxy-used').textContent = 'Failed';
+        document.getElementById('ip-used').textContent = 'Failed';
+        document.getElementById('content-length').textContent = '0';
       }
     });
 
