@@ -131,6 +131,18 @@
 
     <div class="result-container">
       <h2>Results</h2>
+      
+      <!-- Proxy Status Section -->
+      <div class="proxy-status" style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 6px; border: 1px solid #e0e0e0;">
+        <h3 style="margin: 0 0 0.5rem 0; color: #333; font-size: 1.1rem;">🛡️ Proxy Status</h3>
+        <div id="proxy-info" style="font-size: 0.9rem; color: #666;">
+          <div>📡 <strong>Status:</strong> <span id="proxy-enabled">Loading...</span></div>
+          <div>🔗 <strong>Proxy:</strong> <span id="proxy-url">Loading...</span></div>
+          <div>🔄 <strong>Fallback Proxies:</strong> <span id="fallback-count">Loading...</span></div>
+          <div>🛡️ <strong>IP Protection:</strong> <span id="ip-protection">Loading...</span></div>
+        </div>
+      </div>
+      
       <pre id="scraped-html">Scraped content will appear here...</pre>
     </div>
   </div>
@@ -181,6 +193,36 @@
         resultContainer.textContent = `Error: ${error.message}`;
       }
     });
+
+    // Load proxy status on page load
+    async function loadProxyStatus() {
+      try {
+        const response = await fetch('/api/proxy-config');
+        if (response.ok) {
+          const proxyConfig = await response.json();
+          
+          // Update proxy status display
+          document.getElementById('proxy-enabled').textContent = proxyConfig.enabled ? '✅ Enabled' : '❌ Disabled';
+          document.getElementById('proxy-enabled').style.color = proxyConfig.enabled ? '#059669' : '#dc2626';
+          
+          document.getElementById('proxy-url').textContent = proxyConfig.proxy_url;
+          document.getElementById('fallback-count').textContent = `${proxyConfig.fallback_proxies_count} available`;
+          document.getElementById('ip-protection').textContent = proxyConfig.enabled ? '✅ Active' : '🔄 Using Fallbacks';
+          document.getElementById('ip-protection').style.color = proxyConfig.enabled ? '#059669' : '#f59e0b';
+          
+        } else {
+          throw new Error('Failed to load proxy status');
+        }
+      } catch (error) {
+        document.getElementById('proxy-enabled').textContent = '❌ Error';
+        document.getElementById('proxy-url').textContent = 'Failed to load';
+        document.getElementById('fallback-count').textContent = 'Unknown';
+        document.getElementById('ip-protection').textContent = '❌ Error';
+      }
+    }
+
+    // Load proxy status when page loads
+    document.addEventListener('DOMContentLoaded', loadProxyStatus);
   </script>
 </body>
 </html>
