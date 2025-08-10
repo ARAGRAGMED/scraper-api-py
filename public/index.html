@@ -138,7 +138,6 @@
         <div id="proxy-info" style="font-size: 0.9rem; color: #666;">
           <div>📡 <strong>Status:</strong> <span id="proxy-enabled">Loading...</span></div>
           <div>🔗 <strong>Proxy:</strong> <span id="proxy-url">Loading...</span></div>
-          <div>🔄 <strong>Fallback Proxies:</strong> <span id="fallback-count">Loading...</span></div>
           <div>🛡️ <strong>IP Protection:</strong> <span id="ip-protection">Loading...</span></div>
         </div>
       </div>
@@ -183,12 +182,14 @@
       const startTime = Date.now();
 
       try {
+        console.log('Starting scrape request for:', url, 'type:', type);
         const response = await fetch(`/scrape?url=${encodeURIComponent(url)}&type=${encodeURIComponent(type)}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json'
           }
         });
+        console.log('Response received:', response.status, response.ok);
 
         const responseTime = Date.now() - startTime;
         
@@ -216,7 +217,7 @@
                 if (data.proxy_used) {
                     document.getElementById('proxy-used').textContent = data.proxy_used;
                 } else {
-                    document.getElementById('proxy-used').textContent = 'Direct connection';
+                    document.getElementById('proxy-used').textContent = 'Direct Access';
                 }
                 
                 // Try to get IP from response headers or data
@@ -245,20 +246,85 @@
             return; // Exit early since we already processed the response
         }
 
-        if (!response.ok) {
-          throw new Error('Failed to scrape the website. Make sure the URL is correct.');
+        // If we reach here, we need to handle the response normally
+        console.log('Parsing response JSON...');
+        const data = await response.json();
+        console.log('Response data:', data);
+        resultContainer.className = '';
+
+        // Update proxy and IP information from response
+        if (data.proxy_used) {
+            document.getElementById('proxy-used').textContent = data.proxy_used;
+        } else {
+            document.getElementById('proxy-used').textContent = 'Direct Access';
+        }
+        
+        // Try to get IP from response headers or data
+        const ipUsed = data.ip_used || data.server_ip || 'Not provided';
+        document.getElementById('ip-used').textContent = ipUsed;
+
+        if (data.result !== undefined) {
+            if (Array.isArray(data.result)) {
+                if (typeof data.result[0] === 'object') {
+                    const formattedResult = data.result.map(item => 
+                        JSON.stringify(item, null, 2)
+                    ).join('\n\n');
+                    resultContainer.textContent = formattedResult;
+                } else {
+                    resultContainer.textContent = data.result.join('\n');
+                }
+            } else {
+                resultContainer.textContent = data.result;
+            }
+        } else {
+            resultContainer.textContent = 'No result found. Please try a different URL or type.';
         }
 
-                // Content length already handled above, just update proxy info if not already done
-        if (!document.getElementById('proxy-used').textContent.includes('Direct connection')) {
-            document.getElementById('proxy-used').textContent = 'Direct connection';
+        if (!response.ok) {
+          console.log('Response not OK:', response.status, response.statusText);
+          console.log('Response headers:', response.headers);
+          
+          if (response.status === 408) {
+            throw new Error('Request timed out. The website may be slow or blocking requests. Try again or use a different URL.');
+          } else {
+            // Try to get error details from response
+            let errorDetail = 'Failed to scrape the website. Make sure the URL is correct.';
+            try {
+              const errorData = await response.json();
+              console.log('Error response data:', errorData);
+              if (errorData.detail) {
+                errorDetail = errorData.detail.message || errorData.detail;
+              }
+            } catch (parseError) {
+              console.log('Could not parse error response:', parseError);
+            }
+            throw new Error(errorDetail);
+          }
         }
-        if (!document.getElementById('ip-used').textContent.includes('Direct access')) {
-            document.getElementById('ip-used').textContent = 'Direct access';
-        }
+
+                // Proxy and IP information already updated from response data above
       } catch (error) {
         resultContainer.className = '';
-        resultContainer.textContent = `Error: ${error.message}`;
+        
+        // Try to get more detailed error information
+        let errorMessage = error.message;
+        if (error.response) {
+          try {
+            const errorData = await error.response.json();
+            if (errorData.detail) {
+              if (typeof errorData.detail === 'object') {
+                errorMessage = `${errorData.detail.message || 'Unknown error'}\n\nDetails:\n- Error: ${errorData.detail.error || 'Unknown'}\n- URL: ${errorData.detail.url || 'Unknown'}\n- Type: ${errorData.detail.error_type || 'Unknown'}`;
+              } else {
+                errorMessage = errorData.detail;
+              }
+            }
+          } catch (parseError) {
+            // If we can't parse the error response, use the original message
+            console.log('Could not parse error response:', parseError);
+          }
+        }
+        
+        resultContainer.textContent = `Error: ${errorMessage}`;
         
         // Update request details for failed requests
         document.getElementById('status-code').textContent = 'Failed';
@@ -282,9 +348,8 @@
           document.getElementById('proxy-enabled').style.color = proxyConfig.enabled ? '#059669' : '#dc2626';
           
           document.getElementById('proxy-url').textContent = proxyConfig.proxy_url;
-          document.getElementById('fallback-count').textContent = `${proxyConfig.fallback_proxies_count} available`;
-          document.getElementById('ip-protection').textContent = proxyConfig.enabled ? '✅ Active' : '🔄 Using Fallbacks';
-          document.getElementById('ip-protection').style.color = proxyConfig.enabled ? '#059669' : '#f59e0b';
+          document.getElementById('ip-protection').textContent = proxyConfig.enabled ? '🛡️ Protected via Proxy' : '🛡️ Direct Access (No Proxy)';
+          document.getElementById('ip-protection').style.color = '#059669';
           
         } else {
           throw new Error('Failed to load proxy status');
@@ -292,7 +357,6 @@
       } catch (error) {
         document.getElementById('proxy-enabled').textContent = '❌ Error';
         document.getElementById('proxy-url').textContent = 'Failed to load';
-        document.getElementById('fallback-count').textContent = 'Unknown';
         document.getElementById('ip-protection').textContent = '❌ Error';
       }
     }
