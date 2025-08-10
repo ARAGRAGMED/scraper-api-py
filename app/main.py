@@ -6,7 +6,6 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 from bs4 import BeautifulSoup
 import re
-import socket
 from urllib.parse import urljoin
 import os
 
@@ -45,23 +44,9 @@ if os.path.isdir(PUBLIC_DIR):
     app.mount("/public", StaticFiles(directory=PUBLIC_DIR), name="public")
 
 
-def get_server_ip() -> str:
-    """Get the server's public IP address"""
-    try:
-        # Try to get IP from a public service
-        import urllib.request
-        response = urllib.request.urlopen('https://api.ipify.org', timeout=5)
-        return response.read().decode('utf-8')
-    except:
-        try:
-            # Fallback to socket method
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except:
-            return "Unknown"
+def get_connection_status() -> str:
+    """Get safe connection status without exposing IP"""
+    return "Protected"
 
 
 async def make_proxy_request(url: str, use_fallback: bool = True) -> Dict[str, Any]:
@@ -167,10 +152,9 @@ async def fetch_html_with_tracking(url: str) -> tuple[str, dict]:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(url)
             r.raise_for_status()
-            server_ip = get_server_ip()
             return r.text, {
                 "proxy_used": "Direct connection", 
-                "ip_used": f"Server IP: {server_ip} (direct)"
+                "ip_used": "Your IP (direct) - ⚠️ Exposed to target"
             }
     except Exception:
         # If direct access fails, use proxy system
@@ -189,10 +173,9 @@ async def fetch_html_with_tracking(url: str) -> tuple[str, dict]:
                     async with httpx.AsyncClient(timeout=30) as client:
                         r = await client.get(fallback_url)
                         r.raise_for_status()
-                        server_ip = get_server_ip()
                         return r.text, {
                             "proxy_used": "HTTP fallback", 
-                            "ip_used": f"Server IP: {server_ip} (HTTP fallback)"
+                            "ip_used": "Your IP (HTTP) - ⚠️ Exposed to target"
                         }
                 except Exception:
                     pass
