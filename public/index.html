@@ -196,41 +196,65 @@
         document.getElementById('status-code').textContent = response.status;
         document.getElementById('status-code').style.color = response.ok ? '#059669' : '#dc2626';
         document.getElementById('response-time').textContent = `${responseTime}ms`;
-        document.getElementById('content-length').textContent = response.headers.get('content-length') || 'Unknown';
+        
+        // Get content length from response data
+        const contentLength = response.headers.get('content-length');
+        if (contentLength) {
+            document.getElementById('content-length').textContent = `${contentLength} bytes`;
+        } else {
+            // If no content-length header, calculate from response text
+            const responseText = await response.text();
+            const responseClone = response.clone(); // Clone response for JSON parsing
+            document.getElementById('content-length').textContent = `${responseText.length} characters`;
+            
+            // Parse the response for display
+            try {
+                const data = await responseClone.json();
+                resultContainer.className = '';
+
+                // Update proxy and IP information from response
+                if (data.proxy_used) {
+                    document.getElementById('proxy-used').textContent = data.proxy_used;
+                } else {
+                    document.getElementById('proxy-used').textContent = 'Direct connection';
+                }
+                
+                // Try to get IP from response headers or data
+                const ipUsed = data.ip_used || data.server_ip || 'Not provided';
+                document.getElementById('ip-used').textContent = ipUsed;
+
+                if (data.result !== undefined) {
+                    if (Array.isArray(data.result)) {
+                        if (typeof data.result[0] === 'object') {
+                            const formattedResult = data.result.map(item => 
+                        JSON.stringify(item, null, 2)
+                            ).join('\n\n');
+                            resultContainer.textContent = formattedResult;
+                        } else {
+                            resultContainer.textContent = data.result.join('\n');
+                        }
+                    } else {
+                        resultContainer.textContent = data.result;
+                    }
+                } else {
+                    resultContainer.textContent = 'No result found. Please try a different URL or type.';
+                }
+            } catch (parseError) {
+                resultContainer.textContent = responseText;
+            }
+            return; // Exit early since we already processed the response
+        }
 
         if (!response.ok) {
           throw new Error('Failed to scrape the website. Make sure the URL is correct.');
         }
 
-        const data = await response.json();
-        resultContainer.className = '';
-
-        // Update proxy and IP information from response
-        if (data.proxy_used) {
-          document.getElementById('proxy-used').textContent = data.proxy_used;
-        } else {
-          document.getElementById('proxy-used').textContent = 'Direct connection';
+                // Content length already handled above, just update proxy info if not already done
+        if (!document.getElementById('proxy-used').textContent.includes('Direct connection')) {
+            document.getElementById('proxy-used').textContent = 'Direct connection';
         }
-        
-        // Try to get IP from response headers or data
-        const ipUsed = data.ip_used || data.server_ip || 'Not provided';
-        document.getElementById('ip-used').textContent = ipUsed;
-
-        if (data.result !== undefined) {
-          if (Array.isArray(data.result)) {
-            if (typeof data.result[0] === 'object') {
-              const formattedResult = data.result.map(item => 
-          JSON.stringify(item, null, 2)
-              ).join('\n\n');
-              resultContainer.textContent = formattedResult;
-            } else {
-              resultContainer.textContent = data.result.join('\n');
-            }
-          } else {
-            resultContainer.textContent = data.result;
-          }
-        } else {
-          resultContainer.textContent = 'No result found. Please try a different URL or type.';
+        if (!document.getElementById('ip-used').textContent.includes('Direct access')) {
+            document.getElementById('ip-used').textContent = 'Direct access';
         }
       } catch (error) {
         resultContainer.className = '';
