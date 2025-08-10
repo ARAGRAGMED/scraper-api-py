@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -11,6 +11,23 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PUBLIC_DIR = os.path.join(os.path.dirname(BASE_DIR), "public")
+
+# Proxy Configuration
+PROXY_CONFIG = {
+    "enabled": os.getenv("USE_PROXY", "false").lower() == "true",
+    "proxy_url": os.getenv("PROXY_URL", ""),
+    "proxy_type": os.getenv("PROXY_TYPE", "http"),  # http, https, socks5
+    "proxy_auth": {
+        "username": os.getenv("PROXY_USERNAME", ""),
+        "password": os.getenv("PROXY_PASSWORD", "")
+    },
+    "timeout": int(os.getenv("PROXY_TIMEOUT", "30")),
+    "fallback_proxies": [
+        "https://cors-anywhere.herokuapp.com/",
+        "https://api.allorigins.win/get?url=",
+        "https://thingproxy.freeboard.io/fetch/"
+    ]
+}
 
 app = FastAPI(title="Web Scraper API (Python)")
 
@@ -27,20 +44,99 @@ if os.path.isdir(PUBLIC_DIR):
     app.mount("/public", StaticFiles(directory=PUBLIC_DIR), name="public")
 
 
-async def fetch_html(url: str) -> str:
-    async with httpx.AsyncClient(timeout=30) as client:
+async def make_proxy_request(url: str, use_fallback: bool = True) -> Dict[str, Any]:
+    """Make a request through configured proxy or fallback proxies"""
+    
+    # If custom proxy is configured and enabled
+    if PROXY_CONFIG["enabled"] and PROXY_CONFIG["proxy_url"]:
         try:
+            proxies = {
+                "http": f"{PROXY_CONFIG['proxy_type']}://{PROXY_CONFIG['proxy_url']}",
+                "https": f"{PROXY_CONFIG['proxy_type']}://{PROXY_CONFIG['proxy_url']}"
+            }
+            
+            # Add authentication if provided
+            auth = None
+            if PROXY_CONFIG["proxy_auth"]["username"] and PROXY_CONFIG["proxy_auth"]["password"]:
+                auth = (PROXY_CONFIG["proxy_auth"]["username"], PROXY_CONFIG["proxy_auth"]["password"])
+            
+            async with httpx.AsyncClient(
+                proxies=proxies, 
+                auth=auth, 
+                timeout=PROXY_CONFIG["timeout"]
+            ) as client:
+                response = await client.get(url)
+                return {
+                    "status": response.status_code,
+                    "content": response.text if response.status_code == 200 else "Failed",
+                    "proxy_used": f"Custom: {PROXY_CONFIG['proxy_url']}"
+                }
+        except Exception as e:
+            if not use_fallback:
+                return {"status": "Error", "content": str(e), "proxy_used": f"Custom: {PROXY_CONFIG['proxy_url']}"}
+    
+    # Try fallback proxies if custom proxy fails or is not configured
+    if use_fallback:
+        for i, fallback_proxy in enumerate(PROXY_CONFIG["fallback_proxies"]):
+            try:
+                if "allorigins" in fallback_proxy:
+                    # Special handling for allorigins
+                    proxy_url = f"{fallback_proxy}{httpx.URL(url)}"
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        response = await client.get(proxy_url)
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data.get("contents"):
+                                return {
+                                    "status": 200,
+                                    "content": data["contents"],
+                                    "proxy_used": f"Fallback {i+1}: {fallback_proxy}"
+                                }
+                else:
+                    # Standard proxy handling
+                    proxy_url = f"{fallback_proxy}{url}"
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        response = await client.get(proxy_url)
+                        return {
+                            "status": response.status_code,
+                            "content": response.text if response.status_code == 200 else "Failed",
+                            "proxy_used": f"Fallback {i+1}: {fallback_proxy}"
+                        }
+            except Exception as e:
+                continue
+    
+    return {"status": "Error", "content": "All proxy options failed", "proxy_used": "None"}
+
+
+async def fetch_html(url: str) -> str:
+    """Fetch HTML content using proxy system to avoid IP blocking"""
+    
+    # First try direct access
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(url)
             r.raise_for_status()
             return r.text
-        except httpx.HTTPError:
-            # Retry with http:// if https fails
+    except Exception:
+        # If direct access fails, use proxy system
+        proxy_result = await make_proxy_request(url)
+        
+        if proxy_result["status"] == 200:
+            return proxy_result["content"]
+        else:
+            # Try fallback to http if https fails
             if url.lower().startswith("https://"):
-                fallback = "http://" + url[8:]
-                r = await client.get(fallback)
-                r.raise_for_status()
-                return r.text
-            raise
+                fallback_url = "http://" + url[8:]
+                try:
+                    async with httpx.AsyncClient(timeout=30) as client:
+                        r = await client.get(fallback_url)
+                        r.raise_for_status()
+                        return r.text
+                except Exception:
+                    pass
+            
+            # If all else fails, raise an error
+            raise httpx.HTTPError(f"Failed to fetch URL: {url}. Proxy error: {proxy_result.get('content', 'Unknown error')}")
 
 
 def extract_images(soup: BeautifulSoup, base_url: str) -> List[Dict[str, str]]:
@@ -154,6 +250,21 @@ async def demo():
         return HTMLResponse(content="<h1>Demo file not found</h1>", status_code=404)
     with open(index_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
+
+
+@app.get("/api/proxy-config")
+async def get_proxy_config():
+    """Get current proxy configuration (without sensitive data)"""
+    return {
+        "enabled": PROXY_CONFIG["enabled"],
+        "proxy_url": PROXY_CONFIG["proxy_url"] if PROXY_CONFIG["enabled"] else "Not configured",
+        "proxy_type": PROXY_CONFIG["proxy_type"],
+        "timeout": PROXY_CONFIG["timeout"],
+        "has_auth": bool(PROXY_CONFIG["proxy_auth"]["username"] and PROXY_CONFIG["proxy_auth"]["password"]),
+        "fallback_proxies_count": len(PROXY_CONFIG["fallback_proxies"]),
+        "fallback_proxies": PROXY_CONFIG["fallback_proxies"],
+        "instructions": "Set environment variables to configure proxy. See env.template for examples."
+    }
 
 
 @app.get("/")
